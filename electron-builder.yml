@@ -1,0 +1,23 @@
+appId: com.iam-mother.app
+productName: IAM Mother
+directories:
+  buildResources: resources
+  output: release
+files:
+  - "!**/.vscode/*"
+  - "!src/*"
+  - "!electron/*"
+  - "!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml}"
+  - "!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}"
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - arm64
+  executableName: iam-mother
+nsis:
+  artifactName: ${name}-${version}-setup-${arch}.${ext}
+  shortcutName: IAM Mother
+  uninstallDisplayName: IAM Mother
+  createDesktopShortcut: always

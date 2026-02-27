@@ -1,0 +1,163 @@
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;600;700;900&display=swap');
+
+:root {
+  /* --- NOSTROMO PALETTE --- */
+  --bg-primary: #050a05;
+  --bg-secondary: #0a120a;
+  --bg-tertiary: #0f1a0f;
+  --bg-hover: #132013;
+  --bg-active: #1a2a1a;
+  --border-color: #1a3a1a;
+  --border-subtle: #122212;
+  --border-glow: #33ff33;
+
+  --text-primary: #33ff33;
+  --text-secondary: #22aa22;
+  --text-muted: #116611;
+  --text-amber: #ffaa00;
+  --text-warn: #ff4422;
+
+  --accent-green: #33ff33;
+  --accent-amber: #ffaa00;
+  --accent-red: #ff2200;
+  --accent-blue: #00aaff;
+  --accent-cyan: #00ffcc;
+  --accent-orange: #ff6600;
+
+  --crt-glow: 0 0 8px rgba(51, 255, 51, 0.3);
+  --crt-glow-amber: 0 0 8px rgba(255, 170, 0, 0.3);
+  --crt-glow-red: 0 0 8px rgba(255, 34, 0, 0.4);
+
+  --titlebar-height: 32px;
+  --statusbar-height: 24px;
+  --toolbar-height: 28px;
+
+  --font-mono: 'Share Tech Mono', 'Consolas', 'Courier New', monospace;
+  --font-display: 'Orbitron', 'Share Tech Mono', monospace;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+}
+
+/* === CRT SCANLINE OVERLAY === */
+#root::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 99999;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.15) 2px,
+    rgba(0, 0, 0, 0.15) 4px
+  );
+}
+
+/* === CRT FLICKER === */
+@keyframes crt-flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.98; }
+  75% { opacity: 0.97; }
+}
+
+#root {
+  animation: crt-flicker 0.1s infinite alternate;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border: 1px solid var(--bg-primary);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+::selection {
+  background: rgba(51, 255, 51, 0.3);
+  color: #ffffff;
+}
+
+button {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+input, select {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 4px 8px;
+  border-radius: 2px;
+  font: inherit;
+  font-family: var(--font-mono);
+  outline: none;
+  text-transform: uppercase;
+}
+
+input:focus, select:focus {
+  border-color: var(--accent-green);
+  box-shadow: var(--crt-glow);
+}
+
+input::placeholder {
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+/* Hazard stripe mixin */
+.hazard-stripe {
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    rgba(255, 170, 0, 0.08) 4px,
+    rgba(255, 170, 0, 0.08) 8px
+  );
+}
+
+/* Blinking cursor effect */
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Glow pulse for active elements */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 4px rgba(51, 255, 51, 0.2); }
+  50% { box-shadow: 0 0 12px rgba(51, 255, 51, 0.5); }
+}
+
+/* Text glow animation */
+@keyframes text-glow {
+  0%, 100% { text-shadow: 0 0 4px rgba(51, 255, 51, 0.4); }
+  50% { text-shadow: 0 0 12px rgba(51, 255, 51, 0.8); }
+}
