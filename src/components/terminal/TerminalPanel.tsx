@@ -104,11 +104,14 @@ export function TerminalPanel({ nodeId, shell, command, serviceId }: TerminalPan
         return false
       }
 
-      // Shift+Enter → enviar secuencia CSI u para nueva línea sin ejecutar
-      // (usado por Claude Code, Codex y otros CLIs modernos)
+      // Shift+Enter → nueva línea sin ejecutar
       if (ev.shiftKey && ev.key === 'Enter' && ev.type === 'keydown') {
         if (ptyId && !disposed) {
-          window.api.terminal.write(ptyId, '\x1b[13;2u')
+          // Win32 input mode: ESC [ Vk ; Sc ; Uc ; Kd ; Cs ; Rc _
+          // VK_RETURN=13, ScanCode=28, Char=13, KeyDown=1, SHIFT_PRESSED=16, Repeat=1
+          // ConPTY traduce esto a un KEY_EVENT con Shift+Enter
+          // PSReadLine lo mapea a AddLine (insertar línea sin ejecutar)
+          window.api.terminal.write(ptyId, '\x1b[13;28;13;1;16;1_')
         }
         return false
       }
