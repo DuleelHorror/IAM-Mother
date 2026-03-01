@@ -99,5 +99,15 @@ export const DEFAULT_SERVICES: AIServiceConfig[] = [
     command: 'gemini',
     color: '#8AB4F8',
     enabled: true
+  },
+  {
+    id: 'elevenlabs',
+    name: 'ElevenLabs',
+    provider: 'manual',
+    panelType: 'web',
+    url: 'https://elevenlabs.io',
+    sessionPartition: 'persist:elevenlabs',
+    color: '#FF6B2B',
+    enabled: true
   }
 ]
