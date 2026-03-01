@@ -22,6 +22,7 @@ export function PanelFactory({ node }: PanelFactoryProps) {
           shell={config.shell}
           command={config.command}
           serviceId={config.serviceId}
+          cwd={config.cwd}
         />
       )
     case 'web':

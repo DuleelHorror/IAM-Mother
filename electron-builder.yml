@@ -9,6 +9,9 @@ files:
   - "!electron/*"
   - "!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml}"
   - "!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}"
+extraResources:
+  - from: resources/icon.ico
+    to: icon.ico
 win:
   target:
     - target: nsis

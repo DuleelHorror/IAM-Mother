@@ -1,11 +1,20 @@
 import Store from 'electron-store'
 import { safeStorage } from 'electron'
 
+interface WindowBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+  isMaximized: boolean
+}
+
 interface StoreSchema {
   layout: object | null
   services: any[]
   config: any
   presets: any[]
+  windowBounds: WindowBounds | null
 }
 
 export class PersistenceService {
@@ -24,7 +33,8 @@ export class PersistenceService {
           trackingIntervalMs: 300000,
           defaultShell: 'powershell'
         },
-        presets: []
+        presets: [],
+        windowBounds: null
       }
     })
   }
@@ -75,6 +85,15 @@ export class PersistenceService {
   deletePreset(id: string): void {
     const presets = this.getPresets().filter((p: any) => p.id !== id)
     this.store.set('presets', presets)
+  }
+
+  // Window Bounds
+  getWindowBounds(): WindowBounds | null {
+    return this.store.get('windowBounds')
+  }
+
+  saveWindowBounds(bounds: WindowBounds): void {
+    this.store.set('windowBounds', bounds)
   }
 
   // API Keys (encrypted)

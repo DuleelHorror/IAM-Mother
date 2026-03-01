@@ -17,6 +17,7 @@ interface ServiceState {
   removeService: (id: string) => Promise<void>
   getService: (id: string) => AIServiceConfig | undefined
   getEnabledServices: () => AIServiceConfig[]
+  reorderServices: (fromIndex: number, toIndex: number) => Promise<void>
   setGlobalCwd: (cwd: string) => Promise<void>
   selectGlobalCwd: () => Promise<void>
 }
@@ -86,6 +87,14 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
   getService: (id) => get().services.find((s) => s.id === id),
 
   getEnabledServices: () => get().services.filter((s) => s.enabled),
+
+  reorderServices: async (fromIndex, toIndex) => {
+    const services = [...get().services]
+    const [moved] = services.splice(fromIndex, 1)
+    services.splice(toIndex, 0, moved)
+    set({ services })
+    await window.api.persistence.saveServices(services)
+  },
 
   setGlobalCwd: async (cwd) => {
     set({ globalCwd: cwd })

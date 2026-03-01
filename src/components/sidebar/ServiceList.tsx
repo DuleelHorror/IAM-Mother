@@ -1,18 +1,26 @@
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import { useServiceStore } from '../../stores/serviceStore'
 import { useLayoutStore } from '../../stores/layoutStore'
 import { useTrackingStore } from '../../stores/trackingStore'
 import { AIServiceConfig } from '../../types/ai-service'
 import { AddServiceModal } from './AddServiceModal'
+import { EditServiceModal } from './EditServiceModal'
+import { SettingsModal } from './SettingsModal'
 
 export function ServiceList() {
   const services = useServiceStore((s) => s.services)
+  const reorderServices = useServiceStore((s) => s.reorderServices)
   const globalCwd = useServiceStore((s) => s.globalCwd)
   const selectGlobalCwd = useServiceStore((s) => s.selectGlobalCwd)
   const addPanel = useLayoutStore((s) => s.addPanel)
   const usage = useTrackingStore((s) => s.usage)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const [editingService, setEditingService] = useState<AIServiceConfig | null>(null)
   const [collapsed, setCollapsed] = useState(false)
+  const [searchFilter, setSearchFilter] = useState('')
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [dropIndex, setDropIndex] = useState<number | null>(null)
 
   const openService = (service: AIServiceConfig) => {
     const config: any = { serviceId: service.id }
@@ -20,6 +28,7 @@ export function ServiceList() {
     if (service.panelType === 'terminal') {
       config.shell = service.shell
       config.command = service.command
+      config.cwd = service.cwd
       addPanel(service.name, 'terminal', config)
     } else if (service.panelType === 'web') {
       config.url = service.url
@@ -44,7 +53,6 @@ export function ServiceList() {
     if (!p) return 'SIN CARPETA'
     if (p.length <= max) return p
     const parts = p.replace(/\\/g, '/').split('/')
-    // Show drive + last folder
     if (parts.length >= 2) {
       const last = parts[parts.length - 1]
       const drive = parts[0]
@@ -53,6 +61,40 @@ export function ServiceList() {
       return `.../${last}`
     }
     return '...' + p.slice(p.length - max + 3)
+  }
+
+  const enabledServices = services.filter((s) => s.enabled)
+  const filteredServices = searchFilter
+    ? enabledServices.filter((s) => s.name.toLowerCase().includes(searchFilter.toLowerCase()))
+    : enabledServices
+
+  // Drag & drop handlers - use real index in full services array
+  const handleDragStart = (e: React.DragEvent, service: AIServiceConfig) => {
+    const realIdx = services.findIndex((s) => s.id === service.id)
+    setDragIndex(realIdx)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragOver = (e: React.DragEvent, service: AIServiceConfig) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    const realIdx = services.findIndex((s) => s.id === service.id)
+    setDropIndex(realIdx)
+  }
+
+  const handleDrop = (e: React.DragEvent, service: AIServiceConfig) => {
+    e.preventDefault()
+    const toIdx = services.findIndex((s) => s.id === service.id)
+    if (dragIndex != null && dragIndex !== toIdx) {
+      reorderServices(dragIndex, toIdx)
+    }
+    setDragIndex(null)
+    setDropIndex(null)
+  }
+
+  const handleDragEnd = () => {
+    setDragIndex(null)
+    setDropIndex(null)
   }
 
   const sidebarWidth = collapsed ? 42 : 220
@@ -172,10 +214,36 @@ export function ServiceList() {
         </button>
       </div>
 
+      {/* Search filter - only when expanded */}
+      {!collapsed && (
+        <div style={{ padding: '4px 8px', borderBottom: '1px solid var(--border-color)' }}>
+          <input
+            type="text"
+            value={searchFilter}
+            onChange={(e) => setSearchFilter(e.target.value)}
+            placeholder="BUSCAR..."
+            style={{
+              width: '100%',
+              padding: '4px 6px',
+              background: 'var(--bg-primary)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-secondary)',
+              fontSize: 9,
+              fontFamily: 'var(--font-mono)',
+              letterSpacing: 1,
+              textTransform: 'uppercase'
+            }}
+          />
+        </div>
+      )}
+
       {/* Lista de servicios */}
       <div style={{ flex: 1, overflow: 'auto', padding: '2px 0' }}>
-        {services.filter((s) => s.enabled).map((service) => {
+        {filteredServices.map((service) => {
           const serviceUsage = usage[service.id]
+          const realIdx = services.findIndex((s) => s.id === service.id)
+          const isDragging = dragIndex === realIdx
+          const isDropTarget = dropIndex === realIdx && dragIndex !== realIdx
           return collapsed ? (
             <CollapsedServiceItem
               key={service.id}
@@ -189,6 +257,13 @@ export function ServiceList() {
               cost={serviceUsage?.costUsd}
               onOpen={() => openService(service)}
               onDashboard={() => openDashboard(service)}
+              onEdit={() => setEditingService(service)}
+              isDragging={isDragging}
+              isDropTarget={isDropTarget}
+              onDragStart={(e) => handleDragStart(e, service)}
+              onDragOver={(e) => handleDragOver(e, service)}
+              onDrop={(e) => handleDrop(e, service)}
+              onDragEnd={handleDragEnd}
             />
           )
         })}
@@ -264,6 +339,37 @@ export function ServiceList() {
           {collapsed ? '$' : '\u{1F4B0} COSTES'}
         </button>
 
+        {/* Boton configuracion */}
+        <button
+          onClick={() => setShowSettingsModal(true)}
+          title="Configuracion"
+          style={{
+            width: '100%',
+            padding: collapsed ? '6px 0' : '5px 0',
+            background: 'var(--bg-primary)',
+            color: 'var(--text-secondary)',
+            fontSize: collapsed ? 12 : 9,
+            border: '1px solid var(--border-color)',
+            cursor: 'pointer',
+            fontFamily: 'var(--font-mono)',
+            letterSpacing: collapsed ? 0 : 2,
+            textTransform: 'uppercase',
+            transition: 'all 0.15s'
+          }}
+          onMouseEnter={(e) => {
+            const el = e.target as HTMLElement
+            el.style.borderColor = 'var(--text-secondary)'
+            el.style.color = 'var(--text-primary)'
+          }}
+          onMouseLeave={(e) => {
+            const el = e.target as HTMLElement
+            el.style.borderColor = 'var(--border-color)'
+            el.style.color = 'var(--text-secondary)'
+          }}
+        >
+          {collapsed ? '\u2699' : '\u2699 CONFIG'}
+        </button>
+
         {/* Boton agregar servicio */}
         <button
           onClick={() => setShowAddModal(true)}
@@ -298,6 +404,15 @@ export function ServiceList() {
 
       {showAddModal && (
         <AddServiceModal onClose={() => setShowAddModal(false)} />
+      )}
+      {editingService && (
+        <EditServiceModal
+          service={editingService}
+          onClose={() => setEditingService(null)}
+        />
+      )}
+      {showSettingsModal && (
+        <SettingsModal onClose={() => setShowSettingsModal(false)} />
       )}
     </div>
   )
@@ -340,22 +455,41 @@ function CollapsedServiceItem({
   )
 }
 
-/** Item expandido: nombre, tipo, coste */
+/** Item expandido: nombre, tipo, coste, edit, drag */
 function ServiceItem({
   service,
   cost,
   onOpen,
-  onDashboard
+  onDashboard,
+  onEdit,
+  isDragging,
+  isDropTarget,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd
 }: {
   service: AIServiceConfig
   cost?: number
   onOpen: () => void
   onDashboard: () => void
+  onEdit: () => void
+  isDragging: boolean
+  isDropTarget: boolean
+  onDragStart: (e: React.DragEvent) => void
+  onDragOver: (e: React.DragEvent) => void
+  onDrop: (e: React.DragEvent) => void
+  onDragEnd: () => void
 }) {
   const [hovered, setHovered] = useState(false)
 
   return (
     <div
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
       style={{
         padding: '5px 10px',
         display: 'flex',
@@ -364,6 +498,8 @@ function ServiceItem({
         cursor: 'pointer',
         background: hovered ? 'var(--bg-hover)' : 'transparent',
         borderLeft: hovered ? `2px solid ${service.color}` : '2px solid transparent',
+        borderTop: isDropTarget ? '2px solid var(--accent-green)' : '2px solid transparent',
+        opacity: isDragging ? 0.4 : 1,
         transition: 'all 0.15s'
       }}
       onMouseEnter={() => setHovered(true)}
@@ -409,27 +545,50 @@ function ServiceItem({
       </div>
 
       {hovered && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            onDashboard()
-          }}
-          style={{
-            padding: '2px 5px',
-            background: 'transparent',
-            color: 'var(--accent-amber)',
-            fontSize: 8,
-            border: '1px solid var(--accent-amber)',
-            flexShrink: 0,
-            fontFamily: 'var(--font-mono)',
-            letterSpacing: 1,
-            textTransform: 'uppercase',
-            cursor: 'pointer'
-          }}
-          title="Abrir dashboard"
-        >
-          DATOS
-        </button>
+        <>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onEdit()
+            }}
+            style={{
+              padding: '2px 5px',
+              background: 'transparent',
+              color: 'var(--accent-cyan)',
+              fontSize: 8,
+              border: '1px solid var(--accent-cyan)',
+              flexShrink: 0,
+              fontFamily: 'var(--font-mono)',
+              letterSpacing: 1,
+              textTransform: 'uppercase',
+              cursor: 'pointer'
+            }}
+            title="Editar servicio"
+          >
+            EDIT
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onDashboard()
+            }}
+            style={{
+              padding: '2px 5px',
+              background: 'transparent',
+              color: 'var(--accent-amber)',
+              fontSize: 8,
+              border: '1px solid var(--accent-amber)',
+              flexShrink: 0,
+              fontFamily: 'var(--font-mono)',
+              letterSpacing: 1,
+              textTransform: 'uppercase',
+              cursor: 'pointer'
+            }}
+            title="Abrir dashboard"
+          >
+            DATOS
+          </button>
+        </>
       )}
     </div>
   )

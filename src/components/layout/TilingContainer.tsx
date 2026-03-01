@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useEffect, useState } from 'react'
 import { Layout, Model, IJsonModel, TabNode, Action, Actions, ITabRenderValues } from 'flexlayout-react'
 import 'flexlayout-react/style/dark.css'
 import { useLayoutStore } from '../../stores/layoutStore'
+import { useSettingsStore } from '../../stores/settingsStore'
 import { PanelFactory } from './PanelFactory'
 
 const TAB_COLORS = [
@@ -57,8 +58,9 @@ export function TilingContainer() {
     return <PanelFactory node={node} />
   }, [])
 
-  const handleModelChange = useCallback((model: Model) => {
-    // Debounced auto-save durante uso normal
+  const handleModelChange = useCallback((_model: Model) => {
+    // Debounced auto-save durante uso normal (only if enabled)
+    if (!useSettingsStore.getState().autoSaveLayout) return
     if (saveTimeout) clearTimeout(saveTimeout)
     saveTimeout = setTimeout(saveLayoutNow, 2000)
   }, [])

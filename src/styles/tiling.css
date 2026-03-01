@@ -115,3 +115,40 @@
   background: var(--bg-hover);
   text-shadow: var(--crt-glow);
 }
+
+/* --- LIGHT THEME OVERRIDES --- */
+[data-theme="light"] .flexlayout__layout {
+  --color-text: var(--text-primary);
+  --color-background: var(--bg-primary);
+  --color-base: var(--bg-primary);
+  --color-1: var(--bg-secondary);
+  --color-2: var(--bg-tertiary);
+  --color-3: var(--border-color);
+  --color-4: var(--accent-green);
+  --color-5: var(--bg-hover);
+  --color-6: var(--text-secondary);
+  --color-drag1: rgba(26, 138, 26, 0.1);
+  --color-drag2: rgba(26, 138, 26, 0.2);
+  --color-drag1-background: rgba(26, 138, 26, 0.03);
+  --color-drag2-background: rgba(26, 138, 26, 0.06);
+}
+
+[data-theme="light"] .flexlayout__tab_button--selected {
+  text-shadow: none;
+}
+
+[data-theme="light"] .flexlayout__splitter:hover {
+  box-shadow: none;
+}
+
+[data-theme="light"] .flexlayout__splitter_drag {
+  box-shadow: none;
+}
+
+[data-theme="light"] .flexlayout__popup_menu {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="light"] .flexlayout__popup_menu_item:hover {
+  text-shadow: none;
+}

@@ -5,6 +5,7 @@ import { TokenGauge } from './TokenGauge'
 import { CostTracker } from './CostTracker'
 import { ContextWindowBar } from './ContextWindowBar'
 import { SubscriptionBadge } from './SubscriptionBadge'
+import { UsageTrendChart } from './UsageTrendChart'
 
 interface AIDashboardProps {
   serviceId?: string
@@ -118,6 +119,14 @@ export function AIDashboard({ serviceId }: AIDashboardProps) {
         used={usage?.contextWindowUsed || 0}
         max={usage?.contextWindowMax || 200000}
       />
+
+      {/* Usage trend chart */}
+      {usage?.dailyHistory && usage.dailyHistory.length > 0 && (
+        <UsageTrendChart
+          dailyHistory={usage.dailyHistory}
+          color={service.color}
+        />
+      )}
 
       <div style={{
         fontSize: 9,

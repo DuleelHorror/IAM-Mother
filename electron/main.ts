@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, nativeImage, nativeTheme, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, nativeImage, nativeTheme, dialog, screen } from 'electron'
+import { existsSync } from 'fs'
 import path from 'path'
 
 // Forzar tema oscuro: las webs (ChatGPT, etc.) ven prefers-color-scheme: dark
@@ -24,17 +25,29 @@ import { registerTrackingIpc } from './ipc/tracking.ipc'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
+
+// Cargar icono de la app (resources/icon.ico en dev, process.resourcesPath en producción)
+const iconPath = app.isPackaged
+  ? path.join(process.resourcesPath, 'icon.ico')
+  : path.join(__dirname, '../../resources/icon.ico')
+const appIcon = existsSync(iconPath) ? nativeImage.createFromPath(iconPath) : undefined
 let terminalManager: TerminalManager
 let webViewManager: WebViewManager
 let persistenceService: PersistenceService
 let trackingService: TrackingService
 
 function createWindow() {
-  mainWindow = new BrowserWindow({
+  // Initialize persistence early to load window bounds
+  persistenceService = new PersistenceService()
+
+  // Load saved window bounds
+  const savedBounds = persistenceService.getWindowBounds()
+  let windowOpts: Electron.BrowserWindowConstructorOptions = {
     width: 1400,
     height: 900,
     minWidth: 800,
     minHeight: 600,
+    icon: appIcon,
     frame: false,
     titleBarStyle: 'hidden',
     backgroundColor: '#0f0f0f',
@@ -44,12 +57,52 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: false
     }
-  })
+  }
 
-  // Initialize services
+  if (savedBounds) {
+    // Validate that the saved position is on a visible display
+    const targetRect = { x: savedBounds.x, y: savedBounds.y, width: savedBounds.width, height: savedBounds.height }
+    const display = screen.getDisplayMatching(targetRect)
+    if (display) {
+      windowOpts.x = savedBounds.x
+      windowOpts.y = savedBounds.y
+      windowOpts.width = savedBounds.width
+      windowOpts.height = savedBounds.height
+    }
+  }
+
+  mainWindow = new BrowserWindow(windowOpts)
+
+  if (savedBounds?.isMaximized) {
+    mainWindow.maximize()
+  }
+
+  // Debounced window bounds save
+  let boundsTimeout: ReturnType<typeof setTimeout> | null = null
+  const saveBoundsDebounced = () => {
+    if (boundsTimeout) clearTimeout(boundsTimeout)
+    boundsTimeout = setTimeout(() => {
+      if (!mainWindow) return
+      const isMaximized = mainWindow.isMaximized()
+      const bounds = mainWindow.getBounds()
+      persistenceService.saveWindowBounds({
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+        isMaximized
+      })
+    }, 500)
+  }
+
+  mainWindow.on('move', saveBoundsDebounced)
+  mainWindow.on('resize', saveBoundsDebounced)
+  mainWindow.on('maximize', saveBoundsDebounced)
+  mainWindow.on('unmaximize', saveBoundsDebounced)
+
+  // Initialize remaining services
   terminalManager = new TerminalManager()
   webViewManager = new WebViewManager(mainWindow)
-  persistenceService = new PersistenceService()
   trackingService = new TrackingService(persistenceService)
 
   // Register IPC handlers
@@ -104,6 +157,9 @@ function createWindow() {
         case 'n':
           mainWindow?.webContents.send('shortcut', 'new-web-panel')
           break
+        case '/':
+          mainWindow?.webContents.send('shortcut', 'show-shortcuts')
+          break
       }
     }
   })
@@ -115,10 +171,12 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
 
-  // Open DevTools in development
-  if (process.env.NODE_ENV === 'development') {
-    mainWindow.webContents.openDevTools({ mode: 'detach' })
-  }
+  // DevTools: solo con F12, no auto-abrir
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12') {
+      mainWindow?.webContents.toggleDevTools()
+    }
+  })
 
   // Limpiar recursos ANTES de que la ventana se destruya
   mainWindow.on('close', () => {
@@ -136,12 +194,13 @@ function createWindow() {
 }
 
 function createTray() {
-  // Create a simple 16x16 icon from a data URL
-  const icon = nativeImage.createFromDataURL(
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAALGPC/xhBQAAAAlwSFlzAAAOwQAADsEBuJFr7QAAABl0RVh0U29mdHdhcmUAcGFpbnQubmV0IDQuMC4xMkMEa+wAAABLSURBVDhPY/hPBBhVQBwYjCr4/5+BgSGJgSExi4EhOZGBITkRKJaYlJSUCOQnAwBFk5KSEoH8RAAK0BMDhTIZGBhSgWYkE+v/fwBWGDKMVxE2VAAAAABJRU5ErkJggg=='
-  )
+  const trayIcon = appIcon
+    ? appIcon.resize({ width: 16, height: 16 })
+    : nativeImage.createFromDataURL(
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAALGPC/xhBQAAAAlwSFlzAAAOwQAADsEBuJFr7QAAABl0RVh0U29mdHdhcmUAcGFpbnQubmV0IDQuMC4xMkMEa+wAAABLSURBVDhPY/hPBBhVQBwYjCr4/5+BgSGJgSExi4EhOZGBITkRKJaYlJSUCOQnAwBFk5KSEoH8RAAK0BMDhTIZGBhSgWYkE+v/fwBWGDKMVxE2VAAAAABJRU5ErkJggg=='
+      )
 
-  tray = new Tray(icon)
+  tray = new Tray(trayIcon)
   tray.setToolTip('IAM Mother // Centro de Control IA - Duke el Horror')
 
   const contextMenu = Menu.buildFromTemplate([

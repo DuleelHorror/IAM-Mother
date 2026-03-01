@@ -40,6 +40,14 @@ export interface Workspace {
   modelJson: IJsonModel
 }
 
+export interface Preset {
+  id: string
+  name: string
+  createdAt: number
+  workspaces: Workspace[]
+  activeId: string
+}
+
 interface LayoutState {
   workspaces: Workspace[]
   activeWorkspaceId: string
@@ -61,6 +69,13 @@ interface LayoutState {
   getAllWorkspacesJson: () => { workspaces: Workspace[]; activeId: string }
   loadAllWorkspacesJson: (data: { workspaces: Workspace[]; activeId: string }) => void
   saveCurrentToWorkspace: () => void
+
+  // Preset actions
+  presets: Preset[]
+  loadPresets: () => Promise<void>
+  saveAsPreset: (name: string) => Promise<void>
+  loadPreset: (id: string) => void
+  deletePreset: (id: string) => Promise<void>
 }
 
 let nextWsId = 1
@@ -232,6 +247,65 @@ export const useLayoutStore = create<LayoutState>((set, get) => {
         })
       } catch {
         // Ignorar, usar defaults
+      }
+    },
+
+    // === Presets ===
+
+    presets: [],
+
+    loadPresets: async () => {
+      try {
+        const presets = await window.api.persistence.getPresets()
+        set({ presets: presets || [] })
+      } catch {
+        // Ignorar
+      }
+    },
+
+    saveAsPreset: async (name: string) => {
+      const { workspaces, activeWorkspaceId, model } = get()
+      // Capturar estado actual del workspace activo
+      const currentJson = model.toJson() as IJsonModel
+      const snapshotWorkspaces = workspaces.map(ws =>
+        ws.id === activeWorkspaceId ? { ...ws, modelJson: currentJson } : ws
+      )
+
+      const preset: Preset = {
+        id: `preset-${Date.now()}`,
+        name,
+        createdAt: Date.now(),
+        workspaces: snapshotWorkspaces,
+        activeId: activeWorkspaceId
+      }
+
+      try {
+        await window.api.persistence.savePreset(preset)
+        set({ presets: [...get().presets, preset] })
+      } catch {
+        // Ignorar
+      }
+    },
+
+    loadPreset: (id: string) => {
+      const preset = get().presets.find(p => p.id === id)
+      if (!preset) return
+
+      try { window.api.webview.hideAll() } catch {}
+
+      // Restaurar workspaces del preset
+      get().loadAllWorkspacesJson({
+        workspaces: preset.workspaces,
+        activeId: preset.activeId
+      })
+    },
+
+    deletePreset: async (id: string) => {
+      try {
+        await window.api.persistence.deletePreset(id)
+        set({ presets: get().presets.filter(p => p.id !== id) })
+      } catch {
+        // Ignorar
       }
     }
   }

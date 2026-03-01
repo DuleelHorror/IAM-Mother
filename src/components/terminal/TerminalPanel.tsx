@@ -10,9 +10,10 @@ interface TerminalPanelProps {
   shell?: string
   command?: string
   serviceId?: string
+  cwd?: string
 }
 
-export function TerminalPanel({ nodeId, shell, command, serviceId }: TerminalPanelProps) {
+export function TerminalPanel({ nodeId, shell, command, serviceId, cwd }: TerminalPanelProps) {
   const termRef = useRef<HTMLDivElement>(null)
   const [connected, setConnected] = useState(false)
   const globalCwd = useServiceStore((s) => s.globalCwd)
@@ -65,6 +66,30 @@ export function TerminalPanel({ nodeId, shell, command, serviceId }: TerminalPan
 
     // Interceptar Ctrl+C / Ctrl+V antes de que xterm los procese
     term.attachCustomKeyEventHandler((ev) => {
+      // Shift+Enter: salto de línea sin ejecutar
+      if (ev.shiftKey && ev.key === 'Enter' && ev.type === 'keydown') {
+        if (ptyId && !disposed) {
+          const isUnixShell = shell && (
+            shell.includes('bash') ||
+            shell.includes('wsl') ||
+            shell.includes('zsh') ||
+            shell.includes('fish') ||
+            shell.includes('sh')
+          )
+
+          if (isUnixShell) {
+            // Bracketed paste para readline/zsh/fish: insertan el \n literalmente
+            window.api.terminal.write(ptyId, '\x1b[200~\n\x1b[201~')
+          } else {
+            // Win32 input mode para PowerShell/PSReadLine:
+            // ESC [ Vk;Sc;Uc;Kd;Cs;Rc _
+            // VK_RETURN=13, ScanCode=28, Char=13, KeyDown=1, SHIFT_PRESSED=0x10=16, Repeat=1
+            // ConPTY traduce esto a KEY_EVENT con Shift → PSReadLine dispara AddLine
+            window.api.terminal.write(ptyId, '\x1b[13;28;13;1;16;1_')
+          }
+        }
+        return false
+      }
       // Ctrl+C con selección → copiar al clipboard
       if (ev.ctrlKey && ev.key === 'c' && ev.type === 'keydown') {
         const selection = term.getSelection()
@@ -104,18 +129,6 @@ export function TerminalPanel({ nodeId, shell, command, serviceId }: TerminalPan
         return false
       }
 
-      // Shift+Enter → nueva línea sin ejecutar
-      if (ev.shiftKey && ev.key === 'Enter' && ev.type === 'keydown') {
-        if (ptyId && !disposed) {
-          // Win32 input mode: ESC [ Vk ; Sc ; Uc ; Kd ; Cs ; Rc _
-          // VK_RETURN=13, ScanCode=28, Char=13, KeyDown=1, SHIFT_PRESSED=16, Repeat=1
-          // ConPTY traduce esto a un KEY_EVENT con Shift+Enter
-          // PSReadLine lo mapea a AddLine (insertar línea sin ejecutar)
-          window.api.terminal.write(ptyId, '\x1b[13;28;13;1;16;1_')
-        }
-        return false
-      }
-
       return true
     })
 
@@ -133,7 +146,7 @@ export function TerminalPanel({ nodeId, shell, command, serviceId }: TerminalPan
       .create({
         shell,
         command,
-        cwd: globalCwd || undefined,
+        cwd: cwd || globalCwd || undefined,
         cols: term.cols,
         rows: term.rows
       })
@@ -200,8 +213,9 @@ export function TerminalPanel({ nodeId, shell, command, serviceId }: TerminalPan
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <TerminalToolbar serviceId={serviceId} connected={connected} />
+      <TerminalToolbar serviceId={serviceId} connected={connected} shell={shell} />
       <div ref={termRef} style={{ flex: 1, overflow: 'hidden' }} />
     </div>
   )
 }
+

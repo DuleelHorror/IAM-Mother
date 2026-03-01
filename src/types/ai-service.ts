@@ -22,6 +22,8 @@ export interface AIServiceConfig {
   subscriptionCost?: number
   /** Subscription renewal date */
   subscriptionRenewalDate?: string
+  /** Working directory for terminal panels */
+  cwd?: string
   /** Whether this service is enabled */
   enabled: boolean
 }

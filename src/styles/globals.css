@@ -36,6 +36,61 @@
   --font-display: 'Orbitron', 'Share Tech Mono', monospace;
 }
 
+/* --- LIGHT THEME --- */
+[data-theme="light"] {
+  --bg-primary: #f5f5f5;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #e8e8e8;
+  --bg-hover: #e0e0e0;
+  --bg-active: #d5d5d5;
+  --border-color: #cccccc;
+  --border-subtle: #dddddd;
+  --border-glow: #1a8a1a;
+
+  --text-primary: #1a1a1a;
+  --text-secondary: #444444;
+  --text-muted: #888888;
+  --text-amber: #b37700;
+  --text-warn: #cc2200;
+
+  --accent-green: #1a8a1a;
+  --accent-amber: #b37700;
+  --accent-red: #cc2200;
+  --accent-blue: #0077cc;
+  --accent-cyan: #007a66;
+  --accent-orange: #cc5500;
+
+  --crt-glow: none;
+  --crt-glow-amber: none;
+  --crt-glow-red: none;
+}
+
+[data-theme="light"] #root::after {
+  display: none;
+}
+
+[data-theme="light"] #root {
+  animation: none;
+}
+
+[data-theme="light"] ::selection {
+  background: rgba(26, 138, 26, 0.2);
+  color: #1a1a1a;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-track {
+  background: #f0f0f0;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #cccccc;
+  border: 1px solid #f0f0f0;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: #aaaaaa;
+}
+
 * {
   margin: 0;
   padding: 0;

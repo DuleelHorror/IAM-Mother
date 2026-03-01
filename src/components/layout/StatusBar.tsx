@@ -13,6 +13,16 @@ export function StatusBar() {
     0
   )
 
+  // Check for context window alerts
+  const alertServices = Object.entries(usage).filter(([_, data]) => {
+    if (data.contextWindowMax <= 0) return false
+    return (data.contextWindowUsed / data.contextWindowMax) > 0.8
+  })
+  const hasAlert = alertServices.length > 0
+  const isCritical = alertServices.some(([_, data]) =>
+    (data.contextWindowUsed / data.contextWindowMax) > 0.95
+  )
+
   return (
     <div
       style={{
@@ -34,7 +44,17 @@ export function StatusBar() {
       <div style={{ display: 'flex', gap: 20 }}>
         <StatusItem label="SERVICIOS" value={String(services.filter((s) => s.enabled).length)} />
         <StatusItem label="TRACKING" value={String(activeCount)} />
-        <StatusItem label="ESTADO" value="NOMINAL" color="var(--accent-green)" />
+        {hasAlert ? (
+          <span style={{ animation: 'glow-pulse 1.5s ease-in-out infinite' }}>
+            <StatusItem
+              label="CONTEXTO"
+              value="ALERTA"
+              color={isCritical ? 'var(--accent-red)' : 'var(--accent-amber)'}
+            />
+          </span>
+        ) : (
+          <StatusItem label="ESTADO" value="NOMINAL" color="var(--accent-green)" />
+        )}
       </div>
       <div style={{ display: 'flex', gap: 20 }}>
         <StatusItem label="COSTE API" value={`$${totalCost.toFixed(2)}`} color="var(--accent-amber)" />
