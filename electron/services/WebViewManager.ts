@@ -260,4 +260,18 @@ export class WebViewManager extends EventEmitter {
   getIds(): string[] {
     return Array.from(this.views.keys())
   }
+
+  getSession(id: string): Electron.Session | null {
+    return this.views.get(id)?.view.webContents.session || null
+  }
+
+  getCurrentUrl(id: string): string | null {
+    const instance = this.views.get(id)
+    if (!instance || instance.view.webContents.isDestroyed()) return null
+    return instance.view.webContents.getURL()
+  }
+
+  openExternal(url: string): void {
+    shell.openExternal(url)
+  }
 }

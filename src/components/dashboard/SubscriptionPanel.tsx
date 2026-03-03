@@ -1,34 +1,54 @@
 import React, { useMemo } from 'react'
 import { useServiceStore } from '../../stores/serviceStore'
+import { useLayoutStore } from '../../stores/layoutStore'
+import { useTrackingStore } from '../../stores/trackingStore'
 
-interface SubscriptionRow {
-  id: string
+interface ActivePanel {
   name: string
-  color: string
-  monthlyCost: number
-  renewalDate?: string
-  provider: string
+  component: string
+  serviceId?: string
 }
 
 export function SubscriptionPanel() {
   const services = useServiceStore((s) => s.services)
+  const model = useLayoutStore((s) => s.model)
+  const usage = useTrackingStore((s) => s.usage)
 
-  const subscriptions = useMemo<SubscriptionRow[]>(() => {
-    return services
-      .filter(s => s.enabled && s.subscriptionCost && s.subscriptionCost > 0)
-      .map(s => ({
-        id: s.id,
-        name: s.name,
-        color: s.color,
-        monthlyCost: s.subscriptionCost!,
-        renewalDate: s.subscriptionRenewalDate,
-        provider: s.provider
-      }))
-  }, [services])
+  // Walk layout model to find all open panels
+  const openPanels = useMemo<ActivePanel[]>(() => {
+    const panels: ActivePanel[] = []
+    try {
+      const json = model.toJson()
+      const walk = (node: any) => {
+        if (node.component) {
+          panels.push({
+            name: node.name || node.component,
+            component: node.component,
+            serviceId: node.config?.serviceId
+          })
+        }
+        if (node.children) {
+          node.children.forEach(walk)
+        }
+      }
+      walk(json.layout)
+    } catch { /* ignore */ }
+    return panels
+  }, [model])
 
-  const totalMonthly = subscriptions.reduce((s, sub) => s + sub.monthlyCost, 0)
-  const totalAnnual = totalMonthly * 12
-  const maxCost = Math.max(1, ...subscriptions.map(s => s.monthlyCost))
+  // Set of active service IDs (services with at least one open panel)
+  const activeServiceIds = useMemo(() => {
+    return new Set(openPanels.filter(p => p.serviceId).map(p => p.serviceId!))
+  }, [openPanels])
+
+  // Classify panels
+  const terminalPanels = openPanels.filter(p => p.component === 'terminal')
+  const webPanels = openPanels.filter(p => p.component === 'web')
+
+  // Split services into active and inactive
+  const enabledServices = services.filter(s => s.enabled)
+  const activeServices = enabledServices.filter(s => activeServiceIds.has(s.id))
+  const inactiveServices = enabledServices.filter(s => !activeServiceIds.has(s.id))
 
   return (
     <div style={{
@@ -53,7 +73,7 @@ export function SubscriptionPanel() {
           textTransform: 'uppercase',
           textShadow: 'var(--crt-glow-amber)'
         }}>
-          COSTES DE SUSCRIPCION
+          ACTIVIDAD EN TIEMPO REAL
         </div>
         <div style={{
           fontSize: 9,
@@ -62,110 +82,52 @@ export function SubscriptionPanel() {
           letterSpacing: 1,
           marginTop: 4
         }}>
-          WEYLAND-DUKE CORP // MODULO FINANCIERO
+          WEYLAND-DUKE CORP // MONITOR DE ACTIVIDAD
         </div>
       </div>
 
-      {/* Totals */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <div style={{
-          background: 'var(--bg-secondary)',
-          border: '1px solid var(--border-color)',
-          padding: 14,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 6
-        }}>
-          <div style={{
-            fontSize: 8,
-            color: 'var(--text-muted)',
-            letterSpacing: 2,
-            fontFamily: 'var(--font-mono)',
-            textTransform: 'uppercase'
-          }}>
-            TOTAL MENSUAL
-          </div>
-          <div style={{
-            fontSize: 28,
-            color: 'var(--accent-green)',
-            fontFamily: 'var(--font-mono)',
-            fontWeight: 700,
-            textShadow: 'var(--crt-glow)'
-          }}>
-            ${totalMonthly}
-          </div>
-          <div style={{
-            fontSize: 8,
-            color: 'var(--text-muted)',
-            fontFamily: 'var(--font-mono)',
-            letterSpacing: 1
-          }}>
-            USD / MES
-          </div>
-        </div>
-
-        <div style={{
-          background: 'var(--bg-secondary)',
-          border: '1px solid var(--border-color)',
-          padding: 14,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 6
-        }}>
-          <div style={{
-            fontSize: 8,
-            color: 'var(--text-muted)',
-            letterSpacing: 2,
-            fontFamily: 'var(--font-mono)',
-            textTransform: 'uppercase'
-          }}>
-            ESTIMACION ANUAL
-          </div>
-          <div style={{
-            fontSize: 28,
-            color: 'var(--accent-amber)',
-            fontFamily: 'var(--font-mono)',
-            fontWeight: 700,
-            textShadow: 'var(--crt-glow-amber)'
-          }}>
-            ${totalAnnual}
-          </div>
-          <div style={{
-            fontSize: 8,
-            color: 'var(--text-muted)',
-            fontFamily: 'var(--font-mono)',
-            letterSpacing: 1
-          }}>
-            USD / ANO
-          </div>
-        </div>
+      {/* Summary counters */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+        <SummaryBox
+          label="IAS ACTIVAS"
+          value={activeServices.length}
+          total={enabledServices.length}
+          color="var(--accent-green)"
+          glow="var(--crt-glow)"
+        />
+        <SummaryBox
+          label="CONSOLAS"
+          value={terminalPanels.length}
+          color="var(--accent-cyan)"
+          glow="0 0 8px rgba(0, 255, 204, 0.4)"
+        />
+        <SummaryBox
+          label="PANELES WEB"
+          value={webPanels.length}
+          color="var(--accent-amber)"
+          glow="var(--crt-glow-amber)"
+        />
       </div>
 
-      {/* Subscription table */}
+      {/* Section: IAs ACTIVAS */}
       <div style={{
         border: '1px solid var(--border-color)',
         background: 'var(--bg-secondary)'
       }}>
-        {/* Table header */}
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 80px 100px 90px',
           padding: '8px 14px',
           borderBottom: '1px solid var(--border-color)',
-          fontSize: 8,
-          color: 'var(--text-muted)',
-          fontFamily: 'var(--font-mono)',
+          fontSize: 9,
+          color: 'var(--accent-green)',
           letterSpacing: 2,
-          textTransform: 'uppercase'
+          fontFamily: 'var(--font-mono)',
+          textTransform: 'uppercase',
+          textShadow: 'var(--crt-glow)'
         }}>
-          <span>SERVICIO</span>
-          <span>PROVEEDOR</span>
-          <span style={{ textAlign: 'right' }}>COSTE/MES</span>
-          <span style={{ textAlign: 'right' }}>RENOVACION</span>
+          IAS ACTIVAS
         </div>
 
-        {/* Rows */}
-        {subscriptions.length === 0 ? (
+        {activeServices.length === 0 && inactiveServices.length === 0 ? (
           <div style={{
             padding: '20px 14px',
             textAlign: 'center',
@@ -174,26 +136,187 @@ export function SubscriptionPanel() {
             fontFamily: 'var(--font-mono)',
             letterSpacing: 1
           }}>
-            NO HAY SUSCRIPCIONES CONFIGURADAS
+            NO HAY SERVICIOS CONFIGURADOS
           </div>
         ) : (
-          subscriptions.map((sub, i) => (
-            <div
-              key={sub.id}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 80px 100px 90px',
-                padding: '10px 14px',
-                borderBottom: i < subscriptions.length - 1 ? '1px solid var(--border-color)' : 'none',
-                alignItems: 'center',
-                fontSize: 10
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <>
+            {/* Active services */}
+            {activeServices.map((service, i) => {
+              const serviceUsage = usage[service.id]
+              const tokens = serviceUsage
+                ? serviceUsage.inputTokens + serviceUsage.outputTokens
+                : 0
+              const cost = serviceUsage?.costUsd ?? 0
+              return (
+                <div
+                  key={service.id}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '14px 1fr 50px 70px 60px',
+                    padding: '10px 14px',
+                    borderBottom: '1px solid var(--border-color)',
+                    alignItems: 'center',
+                    fontSize: 10,
+                    gap: 8
+                  }}
+                >
+                  {/* Pulsing indicator */}
+                  <div style={{
+                    width: 8,
+                    height: 8,
+                    background: service.color,
+                    boxShadow: `0 0 8px ${service.color}80`,
+                    animation: 'glow-pulse 2s ease-in-out infinite'
+                  }} />
+                  {/* Name */}
+                  <span style={{
+                    fontFamily: 'var(--font-mono)',
+                    color: 'var(--text-primary)',
+                    letterSpacing: 0.5,
+                    textTransform: 'uppercase',
+                    textShadow: 'var(--crt-glow)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {service.name}
+                  </span>
+                  {/* Type */}
+                  <span style={{
+                    fontFamily: 'var(--font-mono)',
+                    color: service.panelType === 'terminal' ? 'var(--accent-cyan)' : 'var(--accent-amber)',
+                    fontSize: 8,
+                    letterSpacing: 1,
+                    textTransform: 'uppercase'
+                  }}>
+                    {service.panelType === 'terminal' ? 'CLI' : 'WEB'}
+                  </span>
+                  {/* Tokens */}
+                  <span style={{
+                    textAlign: 'right',
+                    fontFamily: 'var(--font-mono)',
+                    color: 'var(--text-secondary)',
+                    fontSize: 9
+                  }}>
+                    {tokens > 0 ? formatTokens(tokens) : '---'}
+                  </span>
+                  {/* Cost */}
+                  <span style={{
+                    textAlign: 'right',
+                    fontFamily: 'var(--font-mono)',
+                    color: cost > 0 ? 'var(--accent-green)' : 'var(--text-muted)',
+                    fontWeight: cost > 0 ? 600 : 400,
+                    textShadow: cost > 0 ? 'var(--crt-glow)' : undefined
+                  }}>
+                    {cost > 0 ? `$${cost.toFixed(2)}` : '---'}
+                  </span>
+                </div>
+              )
+            })}
+
+            {/* Inactive services (dimmed) */}
+            {inactiveServices.map((service) => (
+              <div
+                key={service.id}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '14px 1fr 50px 70px 60px',
+                  padding: '8px 14px',
+                  borderBottom: '1px solid var(--border-color)',
+                  alignItems: 'center',
+                  fontSize: 10,
+                  gap: 8,
+                  opacity: 0.35
+                }}
+              >
                 <div style={{
-                  width: 6, height: 6,
-                  background: sub.color,
-                  boxShadow: `0 0 6px ${sub.color}60`,
+                  width: 8,
+                  height: 8,
+                  background: service.color,
+                  opacity: 0.4
+                }} />
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--text-muted)',
+                  letterSpacing: 0.5,
+                  textTransform: 'uppercase',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
+                }}>
+                  {service.name}
+                </span>
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--text-muted)',
+                  fontSize: 8,
+                  letterSpacing: 1
+                }}>
+                  {service.panelType === 'terminal' ? 'CLI' : 'WEB'}
+                </span>
+                <span style={{
+                  textAlign: 'right',
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--text-muted)',
+                  fontSize: 9
+                }}>
+                  ---
+                </span>
+                <span style={{
+                  textAlign: 'right',
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--text-muted)',
+                  fontSize: 9
+                }}>
+                  IDLE
+                </span>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+
+      {/* Section: CONSOLAS ACTIVAS */}
+      {terminalPanels.length > 0 && (
+        <div style={{
+          border: '1px solid var(--border-color)',
+          background: 'var(--bg-secondary)'
+        }}>
+          <div style={{
+            padding: '8px 14px',
+            borderBottom: '1px solid var(--border-color)',
+            fontSize: 9,
+            color: 'var(--accent-cyan)',
+            letterSpacing: 2,
+            fontFamily: 'var(--font-mono)',
+            textTransform: 'uppercase',
+            textShadow: '0 0 8px rgba(0, 255, 204, 0.4)'
+          }}>
+            CONSOLAS ACTIVAS
+          </div>
+
+          {terminalPanels.map((panel, i) => {
+            const service = panel.serviceId
+              ? services.find(s => s.id === panel.serviceId)
+              : undefined
+            return (
+              <div
+                key={`term-${i}`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '8px 14px',
+                  borderBottom: i < terminalPanels.length - 1 ? '1px solid var(--border-color)' : 'none',
+                  fontSize: 10
+                }}
+              >
+                <div style={{
+                  width: 6,
+                  height: 6,
+                  background: service?.color ?? 'var(--accent-cyan)',
+                  boxShadow: `0 0 6px ${service?.color ?? 'rgba(0, 255, 204, 0.5)'}80`,
+                  animation: 'glow-pulse 2s ease-in-out infinite',
                   flexShrink: 0
                 }} />
                 <span style={{
@@ -201,142 +324,129 @@ export function SubscriptionPanel() {
                   color: 'var(--text-primary)',
                   letterSpacing: 0.5,
                   textTransform: 'uppercase',
-                  textShadow: 'var(--crt-glow)'
+                  textShadow: 'var(--crt-glow)',
+                  flex: 1,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
                 }}>
-                  {sub.name}
+                  {panel.name}
                 </span>
+                {service && (
+                  <span style={{
+                    fontSize: 8,
+                    fontFamily: 'var(--font-mono)',
+                    color: 'var(--text-muted)',
+                    letterSpacing: 1,
+                    textTransform: 'uppercase'
+                  }}>
+                    {service.name}
+                  </span>
+                )}
               </div>
-              <span style={{
-                fontFamily: 'var(--font-mono)',
-                color: 'var(--text-muted)',
-                fontSize: 9,
-                letterSpacing: 1,
-                textTransform: 'uppercase'
-              }}>
-                {sub.provider}
-              </span>
-              <span style={{
-                textAlign: 'right',
-                fontFamily: 'var(--font-mono)',
-                color: 'var(--accent-green)',
-                fontWeight: 600,
-                textShadow: 'var(--crt-glow)'
-              }}>
-                ${sub.monthlyCost}/mes
-              </span>
-              <span style={{
-                textAlign: 'right',
-                fontFamily: 'var(--font-mono)',
-                color: sub.renewalDate ? 'var(--accent-cyan)' : 'var(--text-muted)',
-                fontSize: 9
-              }}>
-                {sub.renewalDate || '---'}
-              </span>
-            </div>
-          ))
-        )}
+            )
+          })}
+        </div>
+      )}
 
-        {/* Total row */}
-        {subscriptions.length > 0 && (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 80px 100px 90px',
-            padding: '10px 14px',
-            borderTop: '2px solid var(--accent-amber)',
-            background: 'rgba(255, 170, 0, 0.05)',
-            alignItems: 'center',
-            fontSize: 10
-          }}>
-            <span style={{
-              fontFamily: 'var(--font-mono)',
-              color: 'var(--accent-amber)',
-              letterSpacing: 2,
-              textTransform: 'uppercase',
-              fontWeight: 700,
-              textShadow: 'var(--crt-glow-amber)'
-            }}>
-              TOTAL
-            </span>
-            <span />
-            <span style={{
-              textAlign: 'right',
-              fontFamily: 'var(--font-mono)',
-              color: 'var(--accent-amber)',
-              fontWeight: 700,
-              fontSize: 12,
-              textShadow: 'var(--crt-glow-amber)'
-            }}>
-              ${totalMonthly}/mes
-            </span>
-            <span />
-          </div>
-        )}
-      </div>
-
-      {/* Visual cost comparison bars */}
-      {subscriptions.length > 0 && (
+      {/* Section: PANELES WEB */}
+      {webPanels.length > 0 && (
         <div style={{
           border: '1px solid var(--border-color)',
-          background: 'var(--bg-secondary)',
-          padding: 14
+          background: 'var(--bg-secondary)'
         }}>
           <div style={{
+            padding: '8px 14px',
+            borderBottom: '1px solid var(--border-color)',
             fontSize: 9,
             color: 'var(--accent-amber)',
             letterSpacing: 2,
             fontFamily: 'var(--font-mono)',
             textTransform: 'uppercase',
-            marginBottom: 12,
             textShadow: 'var(--crt-glow-amber)'
           }}>
-            DISTRIBUCION DE COSTES
+            PANELES WEB
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {subscriptions.map(sub => {
-              const pct = (sub.monthlyCost / maxCost) * 100
-              const totalPct = totalMonthly > 0 ? (sub.monthlyCost / totalMonthly) * 100 : 0
-              return (
-                <div key={sub.id}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    marginBottom: 3
+          {webPanels.map((panel, i) => {
+            const service = panel.serviceId
+              ? services.find(s => s.id === panel.serviceId)
+              : undefined
+            return (
+              <div
+                key={`web-${i}`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '8px 14px',
+                  borderBottom: i < webPanels.length - 1 ? '1px solid var(--border-color)' : 'none',
+                  fontSize: 10
+                }}
+              >
+                <div style={{
+                  width: 6,
+                  height: 6,
+                  background: service?.color ?? 'var(--accent-amber)',
+                  boxShadow: `0 0 6px ${service?.color ?? 'rgba(255, 170, 0, 0.5)'}80`,
+                  animation: 'glow-pulse 2s ease-in-out infinite',
+                  flexShrink: 0
+                }} />
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--text-primary)',
+                  letterSpacing: 0.5,
+                  textTransform: 'uppercase',
+                  textShadow: 'var(--crt-glow)',
+                  flex: 1,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
+                }}>
+                  {panel.name}
+                </span>
+                {service && (
+                  <span style={{
+                    fontSize: 8,
+                    fontFamily: 'var(--font-mono)',
+                    color: 'var(--text-muted)',
+                    letterSpacing: 1,
+                    textTransform: 'uppercase'
                   }}>
-                    <span style={{
-                      fontSize: 9,
-                      fontFamily: 'var(--font-mono)',
-                      color: 'var(--text-secondary)',
-                      letterSpacing: 0.5,
-                      textTransform: 'uppercase'
-                    }}>
-                      {sub.name}
-                    </span>
-                    <span style={{
-                      fontSize: 9,
-                      fontFamily: 'var(--font-mono)',
-                      color: 'var(--text-muted)'
-                    }}>
-                      {totalPct.toFixed(0)}% // ${sub.monthlyCost}
-                    </span>
-                  </div>
-                  <div style={{
-                    height: 10,
-                    background: 'var(--bg-primary)',
-                    border: '1px solid var(--border-color)',
-                    overflow: 'hidden'
-                  }}>
-                    <div style={{
-                      width: `${pct}%`,
-                      height: '100%',
-                      background: `linear-gradient(90deg, ${sub.color}88, ${sub.color})`,
-                      boxShadow: `0 0 6px ${sub.color}40`,
-                      transition: 'width 0.5s ease'
-                    }} />
-                  </div>
-                </div>
-              )
-            })}
+                    {service.name}
+                  </span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Empty state when no panels are open */}
+      {openPanels.length === 0 && (
+        <div style={{
+          border: '1px solid var(--border-color)',
+          background: 'var(--bg-secondary)',
+          padding: '30px 14px',
+          textAlign: 'center'
+        }}>
+          <div style={{
+            fontSize: 10,
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-mono)',
+            letterSpacing: 1,
+            marginBottom: 6
+          }}>
+            NO HAY PANELES ABIERTOS
+          </div>
+          <div style={{
+            fontSize: 9,
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-mono)',
+            letterSpacing: 0.5,
+            opacity: 0.6
+          }}>
+            ABRE UN SERVICIO DESDE EL SIDEBAR PARA COMENZAR
           </div>
         </div>
       )}
@@ -354,8 +464,61 @@ export function SubscriptionPanel() {
         marginTop: 'auto'
       }}>
         <span>DUKE EL HORROR INDUSTRIES // 2026</span>
-        <span>CONFIGURAR COSTES EN SERVICIOS IA</span>
+        <span>{openPanels.length} PANEL{openPanels.length !== 1 ? 'ES' : ''} ACTIVO{openPanels.length !== 1 ? 'S' : ''}</span>
       </div>
     </div>
   )
+}
+
+function SummaryBox({ label, value, total, color, glow }: {
+  label: string
+  value: number
+  total?: number
+  color: string
+  glow: string
+}) {
+  return (
+    <div style={{
+      background: 'var(--bg-secondary)',
+      border: '1px solid var(--border-color)',
+      padding: 14,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 6
+    }}>
+      <div style={{
+        fontSize: 8,
+        color: 'var(--text-muted)',
+        letterSpacing: 2,
+        fontFamily: 'var(--font-mono)',
+        textTransform: 'uppercase'
+      }}>
+        {label}
+      </div>
+      <div style={{
+        fontSize: 28,
+        color,
+        fontFamily: 'var(--font-mono)',
+        fontWeight: 700,
+        textShadow: glow
+      }}>
+        {value}
+        {total != null && (
+          <span style={{
+            fontSize: 12,
+            color: 'var(--text-muted)',
+            fontWeight: 400
+          }}>
+            /{total}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return String(n)
 }

@@ -92,6 +92,13 @@ const api = {
     selectDirectory: () => ipcRenderer.invoke('dialog:selectDirectory')
   },
 
+  browser: {
+    openExternal: (url: string) => ipcRenderer.invoke('browser:openExternal', url),
+    importSession: (webviewId: string) =>
+      ipcRenderer.invoke('browser:importSession', webviewId),
+    getAvailableBrowsers: () => ipcRenderer.invoke('browser:getAvailableBrowsers')
+  },
+
   app: {
     minimize: () => ipcRenderer.send('app:minimize'),
     maximize: () => ipcRenderer.send('app:maximize'),

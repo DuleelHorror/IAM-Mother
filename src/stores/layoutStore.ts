@@ -12,7 +12,8 @@ const defaultLayout: IJsonModel = {
     borderBarSize: 0,
     splitterSize: 3,
     tabSetHeaderHeight: 26,
-    tabSetTabStripHeight: 26
+    tabSetTabStripHeight: 26,
+    enableRenderOnDemand: false
   },
   borders: [],
   layout: {
@@ -80,6 +81,17 @@ interface LayoutState {
 
 let nextWsId = 1
 
+/** Ensure critical global settings are always present in a layout JSON */
+function patchGlobals(json: IJsonModel): IJsonModel {
+  return {
+    ...json,
+    global: {
+      ...json.global,
+      enableRenderOnDemand: false
+    }
+  }
+}
+
 export const useLayoutStore = create<LayoutState>((set, get) => {
   const initialWs: Workspace = {
     id: 'ws-0',
@@ -90,12 +102,12 @@ export const useLayoutStore = create<LayoutState>((set, get) => {
   return {
     workspaces: [initialWs],
     activeWorkspaceId: 'ws-0',
-    model: Model.fromJson(defaultLayout),
+    model: Model.fromJson(patchGlobals(defaultLayout)),
     sidebarOpen: true,
 
     setModel: (model) => set({ model }),
 
-    resetModel: () => set({ model: Model.fromJson(defaultLayout) }),
+    resetModel: () => set({ model: Model.fromJson(patchGlobals(defaultLayout)) }),
 
     addPanel: (name, component, config) => {
       const model = get().model
@@ -121,9 +133,9 @@ export const useLayoutStore = create<LayoutState>((set, get) => {
 
     loadModelJson: (json) => {
       try {
-        set({ model: Model.fromJson(json) })
+        set({ model: Model.fromJson(patchGlobals(json)) })
       } catch {
-        set({ model: Model.fromJson(defaultLayout) })
+        set({ model: Model.fromJson(patchGlobals(defaultLayout)) })
       }
     },
 
@@ -160,7 +172,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => {
       set({
         workspaces: [...updatedWorkspaces, newWs],
         activeWorkspaceId: id,
-        model: Model.fromJson(defaultLayout)
+        model: Model.fromJson(patchGlobals(defaultLayout))
       })
     },
 
@@ -180,7 +192,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => {
         set({
           workspaces: filtered,
           activeWorkspaceId: newActive.id,
-          model: Model.fromJson(newActive.modelJson)
+          model: Model.fromJson(patchGlobals(newActive.modelJson))
         })
       } else {
         set({ workspaces: filtered })
@@ -207,7 +219,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => {
       set({
         workspaces: updatedWorkspaces,
         activeWorkspaceId: id,
-        model: Model.fromJson(target.modelJson)
+        model: Model.fromJson(patchGlobals(target.modelJson))
       })
     },
 
@@ -243,7 +255,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => {
         set({
           workspaces: data.workspaces,
           activeWorkspaceId: active.id,
-          model: Model.fromJson(active.modelJson)
+          model: Model.fromJson(patchGlobals(active.modelJson))
         })
       } catch {
         // Ignorar, usar defaults

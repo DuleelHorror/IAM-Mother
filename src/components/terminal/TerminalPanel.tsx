@@ -16,6 +16,8 @@ interface TerminalPanelProps {
 export function TerminalPanel({ nodeId, shell, command, serviceId, cwd }: TerminalPanelProps) {
   const termRef = useRef<HTMLDivElement>(null)
   const [connected, setConnected] = useState(false)
+  const [currentCwd, setCurrentCwd] = useState(cwd || '')
+  const ptyIdRef = useRef<string | null>(null)
   const globalCwd = useServiceStore((s) => s.globalCwd)
 
   useEffect(() => {
@@ -158,7 +160,9 @@ export function TerminalPanel({ nodeId, shell, command, serviceId, cwd }: Termin
         }
 
         ptyId = id
+        ptyIdRef.current = id
         setConnected(true)
+        if (!currentCwd) setCurrentCwd(cwd || globalCwd || '')
 
         // PTY → xterm
         unsubData = window.api.terminal.onData(id, (data: string) => {
@@ -200,6 +204,7 @@ export function TerminalPanel({ nodeId, shell, command, serviceId, cwd }: Termin
     // Cleanup
     return () => {
       disposed = true
+      ptyIdRef.current = null
       observer?.disconnect()
       unsubData?.()
       unsubExit?.()
@@ -211,9 +216,30 @@ export function TerminalPanel({ nodeId, shell, command, serviceId, cwd }: Termin
     }
   }, [nodeId]) // nodeId como key para reidentificar si cambia
 
+  const addRecentFolder = useServiceStore((s) => s.addRecentFolder)
+
+  const handleChangeCwd = async () => {
+    const dir = await window.api.dialog.selectDirectory()
+    if (dir && ptyIdRef.current) {
+      // Send cd command to the running terminal
+      const cdCmd = shell && (shell.includes('powershell') || shell.includes('pwsh'))
+        ? `Set-Location "${dir}"\r`
+        : `cd "${dir}"\r`
+      window.api.terminal.write(ptyIdRef.current, cdCmd)
+      setCurrentCwd(dir)
+      await addRecentFolder(dir)
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <TerminalToolbar serviceId={serviceId} connected={connected} shell={shell} />
+      <TerminalToolbar
+        serviceId={serviceId}
+        connected={connected}
+        shell={shell}
+        cwd={currentCwd}
+        onChangeCwd={handleChangeCwd}
+      />
       <div ref={termRef} style={{ flex: 1, overflow: 'hidden' }} />
     </div>
   )

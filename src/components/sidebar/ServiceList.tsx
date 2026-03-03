@@ -6,6 +6,7 @@ import { AIServiceConfig } from '../../types/ai-service'
 import { AddServiceModal } from './AddServiceModal'
 import { EditServiceModal } from './EditServiceModal'
 import { SettingsModal } from './SettingsModal'
+import { FolderPickerModal } from './FolderPickerModal'
 
 export function ServiceList() {
   const services = useServiceStore((s) => s.services)
@@ -14,27 +15,38 @@ export function ServiceList() {
   const selectGlobalCwd = useServiceStore((s) => s.selectGlobalCwd)
   const addPanel = useLayoutStore((s) => s.addPanel)
   const usage = useTrackingStore((s) => s.usage)
+  const addRecentFolder = useServiceStore((s) => s.addRecentFolder)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [editingService, setEditingService] = useState<AIServiceConfig | null>(null)
+  const [pendingTerminal, setPendingTerminal] = useState<AIServiceConfig | null>(null)
   const [collapsed, setCollapsed] = useState(false)
   const [searchFilter, setSearchFilter] = useState('')
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dropIndex, setDropIndex] = useState<number | null>(null)
 
   const openService = (service: AIServiceConfig) => {
-    const config: any = { serviceId: service.id }
-
     if (service.panelType === 'terminal') {
-      config.shell = service.shell
-      config.command = service.command
-      config.cwd = service.cwd
-      addPanel(service.name, 'terminal', config)
+      // Show folder picker before opening terminal
+      setPendingTerminal(service)
     } else if (service.panelType === 'web') {
+      const config: any = { serviceId: service.id }
       config.url = service.url
       config.partition = service.sessionPartition
       addPanel(service.name, 'web', config)
     }
+  }
+
+  const openTerminalWithFolder = async (service: AIServiceConfig, folder: string | undefined) => {
+    const config: any = { serviceId: service.id }
+    config.shell = service.shell
+    config.command = service.command
+    config.cwd = folder || service.cwd
+    if (folder) {
+      await addRecentFolder(folder)
+    }
+    addPanel(service.name, 'terminal', config)
+    setPendingTerminal(null)
   }
 
   const openDashboard = (service: AIServiceConfig) => {
@@ -46,7 +58,7 @@ export function ServiceList() {
   }
 
   const openSubscriptions = () => {
-    addPanel('COSTES', 'subscriptions', {})
+    addPanel('ACTIVIDAD', 'subscriptions', {})
   }
 
   const truncatePath = (p: string, max: number = 22) => {
@@ -308,10 +320,10 @@ export function ServiceList() {
           {collapsed ? 'M' : 'IAM MOTHER'}
         </button>
 
-        {/* Boton costes de suscripcion */}
+        {/* Boton actividad en tiempo real */}
         <button
           onClick={openSubscriptions}
-          title="Ver costes de suscripcion"
+          title="Ver actividad en tiempo real"
           style={{
             width: '100%',
             padding: collapsed ? '6px 0' : '5px 0',
@@ -336,7 +348,7 @@ export function ServiceList() {
             el.style.textShadow = 'none'
           }}
         >
-          {collapsed ? '$' : '\u{1F4B0} COSTES'}
+          {collapsed ? 'A' : '\u26A1 ACTIVIDAD'}
         </button>
 
         {/* Boton configuracion */}
@@ -413,6 +425,13 @@ export function ServiceList() {
       )}
       {showSettingsModal && (
         <SettingsModal onClose={() => setShowSettingsModal(false)} />
+      )}
+      {pendingTerminal && (
+        <FolderPickerModal
+          serviceName={pendingTerminal.name}
+          onSelect={(folder) => openTerminalWithFolder(pendingTerminal, folder)}
+          onClose={() => setPendingTerminal(null)}
+        />
       )}
     </div>
   )

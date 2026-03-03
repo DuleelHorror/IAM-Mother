@@ -14,6 +14,11 @@ export function WebPanel({ nodeId, url, partition, serviceId }: WebPanelProps) {
   const [currentUrl, setCurrentUrl] = useState(url || '')
   const [title, setTitle] = useState('')
   const [authBanner, setAuthBanner] = useState(false)
+  const [importBanner, setImportBanner] = useState<{
+    type: 'success' | 'error'
+    message: string
+  } | null>(null)
+  const [importing, setImporting] = useState(false)
   const rafRef = useRef<number>(0)
 
   const syncBounds = useCallback(() => {
@@ -109,6 +114,42 @@ export function WebPanel({ nodeId, url, partition, serviceId }: WebPanelProps) {
   const handleReload = () => {
     if (viewIdRef.current) window.api.webview.reload(viewIdRef.current)
     setAuthBanner(false)
+    setImportBanner(null)
+  }
+
+  const handleOpenExternal = () => {
+    if (currentUrl) {
+      window.api.browser.openExternal(currentUrl)
+    }
+  }
+
+  const handleImportSession = async () => {
+    if (!viewIdRef.current) return
+    setImporting(true)
+    setImportBanner(null)
+
+    try {
+      const result = await window.api.browser.importSession(viewIdRef.current)
+      setImportBanner({
+        type: 'success',
+        message: `${result.imported} cookies importadas desde ${result.browser}. Recargando...`
+      })
+      // Auto-reload after importing
+      setTimeout(() => {
+        if (viewIdRef.current) {
+          window.api.webview.reload(viewIdRef.current)
+        }
+        setTimeout(() => setImportBanner(null), 3000)
+      }, 500)
+    } catch (err: any) {
+      setImportBanner({
+        type: 'error',
+        message: err?.message || 'Error al importar sesion'
+      })
+      setTimeout(() => setImportBanner(null), 6000)
+    } finally {
+      setImporting(false)
+    }
   }
 
   return (
@@ -121,6 +162,9 @@ export function WebPanel({ nodeId, url, partition, serviceId }: WebPanelProps) {
         onBack={handleBack}
         onForward={handleForward}
         onReload={handleReload}
+        onOpenExternal={handleOpenExternal}
+        onImportSession={handleImportSession}
+        importing={importing}
       />
       {authBanner && (
         <div style={{
@@ -137,8 +181,7 @@ export function WebPanel({ nodeId, url, partition, serviceId }: WebPanelProps) {
         }}>
           <span style={{ fontWeight: 700, letterSpacing: 1 }}>ACCESO EXTERNO</span>
           <span style={{ color: 'var(--text-secondary)', flex: 1 }}>
-            Google requiere login en el navegador del sistema. Se abrio una ventana externa.
-            Cuando termines, pulsa Recargar.
+            Se abrio una ventana de login. Cuando termines, pulsa Recargar.
           </span>
           <button
             onClick={handleReload}
@@ -159,6 +202,43 @@ export function WebPanel({ nodeId, url, partition, serviceId }: WebPanelProps) {
           </button>
           <button
             onClick={() => setAuthBanner(false)}
+            style={{
+              background: 'transparent',
+              color: 'var(--text-muted)',
+              border: '1px solid var(--border-color)',
+              padding: '4px 8px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              cursor: 'pointer'
+            }}
+          >
+            X
+          </button>
+        </div>
+      )}
+      {importBanner && (
+        <div style={{
+          background: importBanner.type === 'success'
+            ? 'rgba(51, 255, 51, 0.1)'
+            : 'rgba(255, 34, 0, 0.1)',
+          borderBottom: `1px solid ${importBanner.type === 'success' ? 'var(--accent-green)' : 'var(--accent-red)'}`,
+          padding: '8px 12px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          color: importBanner.type === 'success' ? 'var(--accent-green)' : 'var(--accent-red)',
+          zIndex: 10
+        }}>
+          <span style={{ fontWeight: 700, letterSpacing: 1 }}>
+            {importBanner.type === 'success' ? 'SESION IMPORTADA' : 'ERROR'}
+          </span>
+          <span style={{ color: 'var(--text-secondary)', flex: 1 }}>
+            {importBanner.message}
+          </span>
+          <button
+            onClick={() => setImportBanner(null)}
             style={{
               background: 'transparent',
               color: 'var(--text-muted)',

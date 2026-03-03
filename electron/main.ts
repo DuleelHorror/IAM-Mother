@@ -22,6 +22,7 @@ import { registerTerminalIpc } from './ipc/terminal.ipc'
 import { registerWebViewIpc } from './ipc/webview.ipc'
 import { registerPersistenceIpc } from './ipc/persistence.ipc'
 import { registerTrackingIpc } from './ipc/tracking.ipc'
+import { BrowserCookieService } from './services/BrowserCookieService'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -122,6 +123,25 @@ function createWindow() {
   })
   ipcMain.on('app:close', () => mainWindow?.close())
   ipcMain.handle('app:isMaximized', () => mainWindow?.isMaximized() ?? false)
+
+  // Browser integration: open external + cookie import
+  ipcMain.handle('browser:openExternal', (_, url: string) => {
+    webViewManager.openExternal(url)
+  })
+
+  ipcMain.handle('browser:importSession', async (_, webviewId: string) => {
+    const ses = webViewManager.getSession(webviewId)
+    const url = webViewManager.getCurrentUrl(webviewId)
+    if (!ses || !url) throw new Error('Webview no encontrado')
+
+    // Extract domain from URL
+    const domain = new URL(url).hostname
+    return BrowserCookieService.importCookies(ses, domain)
+  })
+
+  ipcMain.handle('browser:getAvailableBrowsers', () => {
+    return BrowserCookieService.getAvailableBrowsers()
+  })
 
   // Directory selection dialog
   ipcMain.handle('dialog:selectDirectory', async () => {

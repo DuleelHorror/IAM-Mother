@@ -9,6 +9,9 @@ interface WebToolbarProps {
   onBack: () => void
   onForward: () => void
   onReload: () => void
+  onOpenExternal?: () => void
+  onImportSession?: () => void
+  importing?: boolean
 }
 
 export function WebToolbar({
@@ -18,7 +21,10 @@ export function WebToolbar({
   onNavigate,
   onBack,
   onForward,
-  onReload
+  onReload,
+  onOpenExternal,
+  onImportSession,
+  importing
 }: WebToolbarProps) {
   const [inputUrl, setInputUrl] = useState(url)
 
@@ -62,6 +68,20 @@ export function WebToolbar({
           placeholder="INTRODUCIR URL..."
         />
       </form>
+
+      {/* Login en navegador externo */}
+      {onOpenExternal && (
+        <ToolbarButton onClick={onOpenExternal} title="Abrir en tu navegador para iniciar sesion con tus credenciales guardadas">
+          LOGIN
+        </ToolbarButton>
+      )}
+
+      {/* Importar sesion del navegador */}
+      {onImportSession && (
+        <ToolbarButton onClick={onImportSession} title="Importar cookies de sesion desde Chrome/Edge">
+          {importing ? 'IMPORTANDO...' : 'IMPORTAR'}
+        </ToolbarButton>
+      )}
 
       {serviceId && (
         <span style={{

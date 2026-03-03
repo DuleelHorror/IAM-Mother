@@ -5,6 +5,8 @@ interface TerminalToolbarProps {
   serviceId?: string
   connected: boolean
   shell?: string
+  cwd?: string
+  onChangeCwd?: () => void
 }
 
 function getShellLabel(shell?: string): string {
@@ -19,8 +21,23 @@ function getShellLabel(shell?: string): string {
   return shell.toUpperCase()
 }
 
-export function TerminalToolbar({ serviceId, connected, shell }: TerminalToolbarProps) {
+function truncatePath(p: string, max: number = 30): string {
+  if (!p) return ''
+  if (p.length <= max) return p
+  const parts = p.replace(/\\/g, '/').split('/')
+  if (parts.length >= 2) {
+    const last = parts[parts.length - 1]
+    const drive = parts[0]
+    const truncated = `${drive}/.../${last}`
+    if (truncated.length <= max) return truncated
+    return `.../${last}`
+  }
+  return '...' + p.slice(p.length - max + 3)
+}
+
+export function TerminalToolbar({ serviceId, connected, shell, cwd, onChangeCwd }: TerminalToolbarProps) {
   const shellLabel = getShellLabel(shell)
+  const [cwdHovered, setCwdHovered] = React.useState(false)
 
   return (
     <PanelToolbar>
@@ -47,6 +64,33 @@ export function TerminalToolbar({ serviceId, connected, shell }: TerminalToolbar
           [{shellLabel}]
         </span>
       )}
+
+      {/* Folder picker button */}
+      <button
+        onClick={onChangeCwd}
+        onMouseEnter={() => setCwdHovered(true)}
+        onMouseLeave={() => setCwdHovered(false)}
+        title={cwd || 'Seleccionar carpeta de trabajo'}
+        style={{
+          padding: '2px 6px',
+          fontSize: 9,
+          fontFamily: 'var(--font-mono)',
+          background: cwdHovered ? 'var(--bg-hover)' : 'transparent',
+          color: cwdHovered ? 'var(--accent-cyan)' : 'var(--text-muted)',
+          border: `1px solid ${cwdHovered ? 'var(--accent-cyan)' : 'var(--border-color)'}`,
+          cursor: 'pointer',
+          letterSpacing: 0.5,
+          transition: 'all 0.15s',
+          maxWidth: 220,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          textShadow: cwdHovered ? '0 0 6px rgba(0, 255, 204, 0.4)' : 'none'
+        }}
+      >
+        {cwd ? truncatePath(cwd) : 'CARPETA...'}
+      </button>
+
       <div style={{ flex: 1 }} />
       <span style={{
         fontSize: 9,

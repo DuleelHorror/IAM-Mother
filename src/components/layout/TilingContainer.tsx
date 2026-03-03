@@ -30,11 +30,13 @@ function saveLayoutNow() {
 export function TilingContainer() {
   const model = useLayoutStore((s) => s.model)
   const layoutRef = useRef<Layout>(null)
-  const [colorPicker, setColorPicker] = useState<{
+  const [tabEditor, setTabEditor] = useState<{
     nodeId: string
     x: number
     y: number
+    name: string
   } | null>(null)
+  const renameInputRef = useRef<HTMLInputElement>(null)
 
   // Guardar layout inmediatamente al cerrar la app
   useEffect(() => {
@@ -46,13 +48,21 @@ export function TilingContainer() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [])
 
-  // Close color picker on any outside click
+  // Close tab editor on any outside click
   useEffect(() => {
-    if (!colorPicker) return
-    const handleClick = () => setColorPicker(null)
+    if (!tabEditor) return
+    const handleClick = () => setTabEditor(null)
     window.addEventListener('mousedown', handleClick)
     return () => window.removeEventListener('mousedown', handleClick)
-  }, [colorPicker])
+  }, [tabEditor])
+
+  // Auto-focus rename input when tab editor opens
+  useEffect(() => {
+    if (tabEditor && renameInputRef.current) {
+      renameInputRef.current.focus()
+      renameInputRef.current.select()
+    }
+  }, [tabEditor])
 
   const factory = useCallback((node: TabNode) => {
     return <PanelFactory node={node} />
@@ -87,19 +97,20 @@ export function TilingContainer() {
       )
     }
 
-    // Add color picker button
+    // Add tab editor button (name + color)
     renderValues.buttons.push(
       <button
         key="color-btn"
-        title="Cambiar color de pestana"
+        title="Editar nombre y color"
         onMouseDown={(e) => {
           e.stopPropagation()
           e.preventDefault()
           const rect = (e.target as HTMLElement).getBoundingClientRect()
-          setColorPicker({
+          setTabEditor({
             nodeId: node.getId(),
             x: rect.left,
-            y: rect.bottom + 4
+            y: rect.bottom + 4,
+            name: node.getName()
           })
         }}
         style={{
@@ -128,12 +139,20 @@ export function TilingContainer() {
         model.doAction(Actions.updateNodeAttributes(nodeId, {
           config: { ...oldConfig, tabColor: color || undefined }
         }))
-        // Trigger save
         if (saveTimeout) clearTimeout(saveTimeout)
         saveTimeout = setTimeout(saveLayoutNow, 500)
       }
     } catch { /* ignore */ }
-    setColorPicker(null)
+  }, [model])
+
+  const applyName = useCallback((nodeId: string, name: string) => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    try {
+      model.doAction(Actions.renameTab(nodeId, trimmed))
+      if (saveTimeout) clearTimeout(saveTimeout)
+      saveTimeout = setTimeout(saveLayoutNow, 500)
+    } catch { /* ignore */ }
   }, [model])
 
   return (
@@ -148,52 +167,94 @@ export function TilingContainer() {
         realtimeResize={true}
       />
 
-      {/* Color picker popup */}
-      {colorPicker && (
+      {/* Tab editor popup (name + color) */}
+      {tabEditor && (
         <div
           onMouseDown={(e) => e.stopPropagation()}
           style={{
             position: 'fixed',
-            left: colorPicker.x,
-            top: colorPicker.y,
+            left: tabEditor.x,
+            top: tabEditor.y,
             zIndex: 99999,
             background: 'var(--bg-secondary)',
             border: '1px solid var(--accent-green)',
             boxShadow: '0 0 12px rgba(51, 255, 51, 0.15), 0 4px 12px rgba(0,0,0,0.5)',
             padding: 6,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 5,
+            minWidth: 120
+          }}
+        >
+          {/* Name input */}
+          <input
+            ref={renameInputRef}
+            type="text"
+            value={tabEditor.name}
+            onChange={(e) => setTabEditor({ ...tabEditor, name: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                applyName(tabEditor.nodeId, tabEditor.name)
+                setTabEditor(null)
+              }
+              if (e.key === 'Escape') setTabEditor(null)
+            }}
+            onBlur={() => {
+              applyName(tabEditor.nodeId, tabEditor.name)
+            }}
+            style={{
+              background: 'var(--bg-primary)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-primary)',
+              padding: '3px 5px',
+              fontSize: 10,
+              fontFamily: 'var(--font-mono)',
+              letterSpacing: 0.5,
+              textTransform: 'uppercase',
+              width: '100%',
+              boxSizing: 'border-box'
+            }}
+            placeholder="NOMBRE..."
+          />
+          {/* Color grid */}
+          <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(4, 1fr)',
             gap: 4
-          }}
-        >
-          {TAB_COLORS.map((c) => (
-            <button
-              key={c.name}
-              title={c.name}
-              onClick={() => applyColor(colorPicker.nodeId, c.value)}
-              style={{
-                width: 22,
-                height: 22,
-                background: c.value || 'var(--bg-primary)',
-                border: c.value
-                  ? `1px solid ${c.value}`
-                  : '1px solid var(--border-color)',
-                cursor: 'pointer',
-                boxShadow: c.value ? `0 0 4px ${c.value}40` : 'none',
-                position: 'relative'
-              }}
-            >
-              {!c.value && (
-                <span style={{
-                  color: 'var(--text-muted)',
-                  fontSize: 10,
-                  fontFamily: 'var(--font-mono)'
-                }}>
-                  X
-                </span>
-              )}
-            </button>
-          ))}
+          }}>
+            {TAB_COLORS.map((c) => (
+              <button
+                key={c.name}
+                title={c.name}
+                onClick={() => {
+                  applyColor(tabEditor.nodeId, c.value)
+                  applyName(tabEditor.nodeId, tabEditor.name)
+                  setTabEditor(null)
+                }}
+                style={{
+                  width: 22,
+                  height: 22,
+                  background: c.value || 'var(--bg-primary)',
+                  border: c.value
+                    ? `1px solid ${c.value}`
+                    : '1px solid var(--border-color)',
+                  cursor: 'pointer',
+                  boxShadow: c.value ? `0 0 4px ${c.value}40` : 'none',
+                  position: 'relative'
+                }}
+              >
+                {!c.value && (
+                  <span style={{
+                    color: 'var(--text-muted)',
+                    fontSize: 10,
+                    fontFamily: 'var(--font-mono)'
+                  }}>
+                    X
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

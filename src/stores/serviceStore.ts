@@ -10,6 +10,7 @@ declare global {
 interface ServiceState {
   services: AIServiceConfig[]
   globalCwd: string
+  recentFolders: string[]
   loading: boolean
   loadServices: () => Promise<void>
   addService: (service: AIServiceConfig) => Promise<void>
@@ -20,11 +21,14 @@ interface ServiceState {
   reorderServices: (fromIndex: number, toIndex: number) => Promise<void>
   setGlobalCwd: (cwd: string) => Promise<void>
   selectGlobalCwd: () => Promise<void>
+  addRecentFolder: (folder: string) => Promise<void>
+  removeRecentFolder: (folder: string) => Promise<void>
 }
 
 export const useServiceStore = create<ServiceState>((set, get) => ({
   services: DEFAULT_SERVICES,
   globalCwd: '',
+  recentFolders: [],
   loading: false,
 
   loadServices: async () => {
@@ -34,6 +38,9 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       const config = await window.api.persistence.getConfig()
       if (config?.globalCwd) {
         set({ globalCwd: config.globalCwd })
+      }
+      if (config?.recentFolders) {
+        set({ recentFolders: config.recentFolders })
       }
 
       const saved = await window.api.persistence.getServices()
@@ -107,5 +114,21 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     if (result) {
       get().setGlobalCwd(result)
     }
+  },
+
+  addRecentFolder: async (folder) => {
+    const current = get().recentFolders
+    // Move to front, deduplicate, limit to 12
+    const updated = [folder, ...current.filter(f => f !== folder)].slice(0, 12)
+    set({ recentFolders: updated })
+    const config = await window.api.persistence.getConfig()
+    await window.api.persistence.saveConfig({ ...config, recentFolders: updated })
+  },
+
+  removeRecentFolder: async (folder) => {
+    const updated = get().recentFolders.filter(f => f !== folder)
+    set({ recentFolders: updated })
+    const config = await window.api.persistence.getConfig()
+    await window.api.persistence.saveConfig({ ...config, recentFolders: updated })
   }
 }))
