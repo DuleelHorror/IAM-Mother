@@ -4,6 +4,7 @@ import 'flexlayout-react/style/dark.css'
 import { useLayoutStore } from '../../stores/layoutStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { PanelFactory } from './PanelFactory'
+import { destroySession } from '../../services/terminalSessionRegistry'
 
 const TAB_COLORS = [
   { name: 'VERDE', value: '#33ff33' },
@@ -76,8 +77,20 @@ export function TilingContainer() {
   }, [])
 
   const handleAction = useCallback((action: Action) => {
+    // When a tab is actually closed, destroy its terminal session
+    if (action.type === Actions.DELETE_TAB) {
+      const nodeId = (action as any).data?.node
+      if (nodeId) {
+        try {
+          const node = model.getNodeById(nodeId) as TabNode | null
+          if (node && node.getComponent?.() === 'terminal') {
+            destroySession(nodeId)
+          }
+        } catch { /* node may already be gone */ }
+      }
+    }
     return action
-  }, [])
+  }, [model])
 
   const handleRenderTab = useCallback((node: TabNode, renderValues: ITabRenderValues) => {
     const config = node.getConfig() || {}

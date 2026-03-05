@@ -4,6 +4,11 @@ import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { TerminalToolbar } from './TerminalToolbar'
 import { useServiceStore } from '../../stores/serviceStore'
+import {
+  getSession,
+  registerSession,
+  detachSession
+} from '../../services/terminalSessionRegistry'
 
 interface TerminalPanelProps {
   nodeId: string
@@ -80,13 +85,8 @@ export function TerminalPanel({ nodeId, shell, command, serviceId, cwd }: Termin
           )
 
           if (isUnixShell) {
-            // Bracketed paste para readline/zsh/fish: insertan el \n literalmente
             window.api.terminal.write(ptyId, '\x1b[200~\n\x1b[201~')
           } else {
-            // Win32 input mode para PowerShell/PSReadLine:
-            // ESC [ Vk;Sc;Uc;Kd;Cs;Rc _
-            // VK_RETURN=13, ScanCode=28, Char=13, KeyDown=1, SHIFT_PRESSED=0x10=16, Repeat=1
-            // ConPTY traduce esto a KEY_EVENT con Shift → PSReadLine dispara AddLine
             window.api.terminal.write(ptyId, '\x1b[13;28;13;1;16;1_')
           }
         }
@@ -98,9 +98,8 @@ export function TerminalPanel({ nodeId, shell, command, serviceId, cwd }: Termin
         if (selection) {
           navigator.clipboard.writeText(selection)
           term.clearSelection()
-          return false // no enviar al PTY
+          return false
         }
-        // Sin selección → dejar pasar como SIGINT
         return true
       }
 
@@ -111,7 +110,7 @@ export function TerminalPanel({ nodeId, shell, command, serviceId, cwd }: Termin
             window.api.terminal.write(ptyId, text)
           }
         })
-        return false // no enviar al PTY
+        return false
       }
 
       // Ctrl+Shift+C → copiar siempre
@@ -143,51 +142,124 @@ export function TerminalPanel({ nodeId, shell, command, serviceId, cwd }: Termin
       }
     })
 
-    // Crear PTY de forma async
-    window.api.terminal
-      .create({
-        shell,
-        command,
-        cwd: cwd || globalCwd || undefined,
-        cols: term.cols,
-        rows: term.rows
+    // Check if there's an existing session for this node (e.g., after workspace switch)
+    const existingSession = getSession(nodeId)
+
+    if (existingSession && existingSession.alive) {
+      // Reattach to existing PTY session
+      ptyId = existingSession.ptyId
+      ptyIdRef.current = ptyId
+
+      // Stop buffering listeners from the detached state
+      existingSession.unsubData?.()
+      existingSession.unsubExit?.()
+      existingSession.unsubData = null
+      existingSession.unsubExit = null
+
+      // Replay buffered output
+      for (const chunk of existingSession.buffer) {
+        term.write(chunk)
+      }
+      existingSession.buffer = []
+      existingSession.bufferSize = 0
+      existingSession.detached = false
+
+      setConnected(true)
+      if (!currentCwd) setCurrentCwd(cwd || globalCwd || '')
+
+      // PTY → xterm
+      unsubData = window.api.terminal.onData(ptyId, (data: string) => {
+        if (!disposed) term.write(data)
       })
-      .then((id: string) => {
-        // Si el componente se desmontó mientras esperábamos, matar el PTY
-        if (disposed) {
-          window.api.terminal.kill(id)
-          return
+
+      // xterm → PTY
+      inputDisposable = term.onData((data) => {
+        if (!disposed && ptyId) {
+          window.api.terminal.write(ptyId, data)
         }
-
-        ptyId = id
-        ptyIdRef.current = id
-        setConnected(true)
-        if (!currentCwd) setCurrentCwd(cwd || globalCwd || '')
-
-        // PTY → xterm
-        unsubData = window.api.terminal.onData(id, (data: string) => {
-          if (!disposed) term.write(data)
-        })
-
-        // xterm → PTY
-        inputDisposable = term.onData((data) => {
-          if (!disposed && ptyId) {
-            window.api.terminal.write(ptyId, data)
-          }
-        })
-
-        // Salida del proceso
-        unsubExit = window.api.terminal.onExit(id, () => {
-          if (!disposed) {
-            term.writeln('\r\n\x1b[33m[PROCESO TERMINADO]\x1b[0m')
-            setConnected(false)
-          }
-        })
-
-        // Sincronizar tamaño tras la conexión
-        try { fitAddon.fit() } catch { /* ignore */ }
-        window.api.terminal.resize(id, term.cols, term.rows)
       })
+
+      // Salida del proceso
+      unsubExit = window.api.terminal.onExit(ptyId, () => {
+        if (!disposed) {
+          term.writeln('\r\n\x1b[33m[PROCESO TERMINADO]\x1b[0m')
+          setConnected(false)
+          existingSession.alive = false
+        }
+      })
+
+      // Store listeners in session for cleanup
+      existingSession.unsubData = unsubData
+      existingSession.unsubExit = unsubExit
+
+      // Sync size
+      try { fitAddon.fit() } catch { /* ignore */ }
+      window.api.terminal.resize(ptyId, term.cols, term.rows)
+    } else if (existingSession && !existingSession.alive) {
+      // Session exists but process died while detached
+      for (const chunk of existingSession.buffer) {
+        term.write(chunk)
+      }
+      term.writeln('\r\n\x1b[33m[PROCESO TERMINADO]\x1b[0m')
+      setConnected(false)
+
+      // Clean up stale session, create fresh one
+      existingSession.unsubData?.()
+      existingSession.unsubExit?.()
+    } else {
+      // No existing session - create new PTY
+      window.api.terminal
+        .create({
+          shell,
+          command,
+          cwd: cwd || globalCwd || undefined,
+          cols: term.cols,
+          rows: term.rows
+        })
+        .then((id: string) => {
+          if (disposed) {
+            window.api.terminal.kill(id)
+            return
+          }
+
+          ptyId = id
+          ptyIdRef.current = id
+          setConnected(true)
+          if (!currentCwd) setCurrentCwd(cwd || globalCwd || '')
+
+          // Register session in registry
+          const session = registerSession(nodeId, id)
+
+          // PTY → xterm
+          unsubData = window.api.terminal.onData(id, (data: string) => {
+            if (!disposed) term.write(data)
+          })
+
+          // xterm → PTY
+          inputDisposable = term.onData((data) => {
+            if (!disposed && ptyId) {
+              window.api.terminal.write(ptyId, data)
+            }
+          })
+
+          // Salida del proceso
+          unsubExit = window.api.terminal.onExit(id, () => {
+            if (!disposed) {
+              term.writeln('\r\n\x1b[33m[PROCESO TERMINADO]\x1b[0m')
+              setConnected(false)
+              session.alive = false
+            }
+          })
+
+          // Store listeners in session
+          session.unsubData = unsubData
+          session.unsubExit = unsubExit
+
+          // Sincronizar tamaño tras la conexión
+          try { fitAddon.fit() } catch { /* ignore */ }
+          window.api.terminal.resize(id, term.cols, term.rows)
+        })
+    }
 
     // ResizeObserver para auto-fit
     observer = new ResizeObserver(() => {
@@ -201,20 +273,21 @@ export function TerminalPanel({ nodeId, shell, command, serviceId, cwd }: Termin
     })
     observer.observe(container)
 
-    // Cleanup
+    // Cleanup: detach session instead of killing PTY
     return () => {
       disposed = true
       ptyIdRef.current = null
       observer?.disconnect()
-      unsubData?.()
-      unsubExit?.()
       inputDisposable?.dispose()
+
+      // Detach instead of destroying - keeps PTY alive and buffers output
       if (ptyId) {
-        window.api.terminal.kill(ptyId)
+        detachSession(nodeId)
       }
+
       term.dispose()
     }
-  }, [nodeId]) // nodeId como key para reidentificar si cambia
+  }, [nodeId])
 
   const addRecentFolder = useServiceStore((s) => s.addRecentFolder)
 
@@ -244,4 +317,3 @@ export function TerminalPanel({ nodeId, shell, command, serviceId, cwd }: Termin
     </div>
   )
 }
-
